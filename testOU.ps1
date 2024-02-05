@@ -1,74 +1,79 @@
 ﻿#import data from file 
+function writeLog {
+    Param ($logString)
+    Write-Output $logString
+    Write-Output $logString >> $logFile
+}
+$nameFile = "Create User"
+$date = Get-Date -f yyyy-MM-dd-HHmmss
+$logFile = $nameFile + "_" + $date + ".log"
+$folderPath = "C:\results"
+if (-not (Test-Path $folderPath -PathType Container)) {
+    # Если папки нет, то создаем её
+    New-Item -ItemType Directory -Path $folderPath -ErrorAction SilentlyContinue | Out-Null
+}
+$logFile = $folderPath + "\" + $logFile
+#-----------------------------------------------------------------------------------------------------------------------------------------------#
+writeLog "Импорт файлов"
 $userData = Import-Csv C:\1\useerData.csv 
 $globalDomain = "@r7-group.ru"
 $core = "OU=R7 Group,DC=r7-group,DC=local"
 $company = '"Р7 Групп"'
 $ouList = Get-ADOrganizationalUnit -SearchBase $core -filter * | Select-Object -ExpandProperty DistinguishedName
 $usersAD = Get-aduser -Filter * -Properties *
-function New-Logon {
-    param (
-        $logon
-    )
-    $userFullName = $logon.FullName
-    $userSurname, $userName, $userMidlName = $userFullName -split ' '  
-    $usershortName = (Get-Translit "$($userName[0]).$userSurname") 
-    if ($usersAD -contains $usershortName) {
-        $usershortName = (Get-Translit "$($userName[0])+$($userMidlName[0]).$userSurname")
-    }
-    
+
+
+$userFullName = $userData.FullName 
+$userSurname, $userName, $userMidlName = $userFullName -split ' '  
+if ($null -eq $userMidlName) {
+    Write-Host "Не указанно отчество"
+    break
+}
+$usershortName = (Get-Translit "$($userName[0]).$userSurname") 
+if ($usersAD -contains $usershortName) {
+    $usershortName = (Get-Translit "$($userName[0])+$($userMidlName[0]).$userSurname")
+}   
+$manager = $userData.Manager
+$managerAD = Get-aduser -Filter { displayname -eq $manager }
+$AccountPassword = ConvertTo-SecureString -String (Get-Password) -AsPlainText -Force
+$userDepartment = $userData.Department
+$userDivision = $userData.Division
+$jobTitle = $userData.Title 
+$userOU = "OU=" + $userDepartment + "," + $core 
+$usreMailAddress = $usershortName + $globalDomain 
+$ipPhone = $userData.phone
+$userOfficePhone = "+7(495)988-47-77#$($ipPhone)"
+if (($ouList -contains $userOU) -and ($null -ne $userOU)) { 
+    $OU = "OU=User,", $userOU
+}
+else { 
+    Write-Host "Ошибка в название департамента и департамент не задан. Учетная сотрудника $($userFullName) запись будет помещена в корень"
+    $OU = $core
+}
+$other = @{
+    ipPhone = $ipPhone
+}
+$userAttrubute = @{
+    Name            = $usershortName
+    GivenName       = $userName
+    Surname         = $userSurname
+    Company         = $company
+    Department      = $userDivision
+    Description     = $jobTitle
+    DisplayName     = $userFullName
+    EmailAddress    = $usreMailAddress
+    Enabled         = $true
+    Manager         = $managerAD
+    Path            = $OU
+    SamAccountName  = $usershortName
+    Title           = $jobTitle
+    AccountPassword = $AccountPassword
+    OfficePhone     = $userOfficePhone
+    OtherAttributes = $other
+
 }
 
-
-
-
-
-function New-DomainUser {
-    param (
-        $userData
-    )
-
-    $manager = $userData.Manager
-    $managerAD = Get-aduser -Filter { displayname -eq $manager }
-    $AccountPassword = ConvertTo-SecureString -String (Get-Password) -AsPlainText -Force
-    $userDepartment = $userData.Department
-    $userDivision = $userData.Division
-    $jobTitle = $userData.Title 
-    $userOU = "OU=" + $userDepartment + "," + $core 
-    $usreMailAddress = $usershortName + $globalDomain 
-    $ipPhone = $userData.phone
-    $userOfficePhone = "+7(495)988-47-77#$($ipPhone)"
-    if (($ouList -contains $userOU) -and ($null -ne $userOU)) { 
-        $OU = "OU=User,",$userOU
-    }
-    else { 
-        Write-Host "Ошибка в название департамента и департамент не задан. Учетная сотрудника $($userFullName) запись будет помещена в корень"
-        $OU = $core
-    }
-    $other = @{
-        ipPhone = $ipPhone
-    }
-    $userAttrubute = @{
-        Name            = $usershortName
-        GivenName       = $userName
-        Surname         = $userSurname
-        Company         = $company
-        Department      = $userDivision
-        Description     = $jobTitle
-        DisplayName     = $userFullName
-        EmailAddress    = $usreMailAddress
-        Enabled         = $true
-        Manager         = $managerAD
-        Path            = $OU
-        SamAccountName  = $usershortName
-        Title           = $jobTitle
-        AccountPassword = $AccountPassword
-        OfficePhone     = $userOfficePhone
-        OtherAttributes = $other
-
-    }
-
-    New-aduser @userAttrubute 
-}
+New-aduser @userAttrubute 
 
 Add-ADGroupMember -Identity "fa DOM К31_Лобачевского RW"  -Members $usersAD
 function Get-Password ($length = 10) {
@@ -82,9 +87,7 @@ function Get-Password ($length = 10) {
 } 
 Get-Password
 function Get-Translit {
-    param(
-        [string]$inString
-        )
+    param([string]$inString)
     #Создаем хэш-таблицу соответствия русских и латинских символов
     $Translit = @{
         [char]'а' = "a"; [char]'А' = "a"; [char]'б' = "b"; [char]'Б' = "b"; [char]'в' = "v"; [char]'В' = "v"; [char]'г' = "g"; [char]'Г' = "g";
