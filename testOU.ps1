@@ -21,9 +21,9 @@ $ouList = Get-ADOrganizationalUnit -SearchBase $core -filter * | Select-Object -
 $usersAD = Get-aduser -Filter * -Properties * #Список всех сотрудников
 #------------------------------------------------Формируем логин------------------------------------------------#
 $userFullName = ($userData.FullName).Trim() # Помещаем полное ФИО в переменную
-$userSurname, $userName, $userMidlName = $userFullName -split ' '  # Разбиваем ФИО на свои переменные 
+$userSurname, $userName, $userMidlName = $userFullName -split ' ' -ne ''# Разбиваем ФИО на свои переменные 
 #Проверка, что Отчество не пустое
-if (-not ($userName -eq '' -or $userSurname -eq '' -or $userMidlName -eq '')) {
+if (($null -eq $userName) -or ($null -eq $userSurname) -or ($null -eq $userMidlName)) {
     writeLog "ФИО указанно не полностью. Работа скрипта завершина "
     break
 }
@@ -83,14 +83,15 @@ $userAttrubute = @{
     OfficePhone       = "+7(495)988-47-77#$($ipPhone)"
     OtherAttributes   = $other
 }
+#------------------------------------------------Создание учетной записи------------------------------------------------#
 writeLog "Создание учетной записи сотрудника "
 try {
-    New-aduser @userAttrubute 
+    New-aduser @userAttrubute # Запускаем создание учетной записи 
     writeLog "Учетная запись создана успешно"
 
 }
 catch [Microsoft.ActiveDirectory.Management.ADIdentityAlreadyExistsException] {
-    # Обработка конкретной ошибки
+    # Обработка ошибки если учетка есть 
     $errorMessage = "Error: Такая учетная записоь уже существует"
     writeLog $errorMessage
 }
@@ -99,17 +100,26 @@ catch {
     $errorMessage = "An unexpected error occurred. $_"
     writeLog $errorMessage
 }
+#------------------------------------------------Добавление в группы------------------------------------------------#
 #Add-ADGroupMember -Identity "fa DOM К31_Лобачевского RW"  -Members $usersAD
+
+
+
+
+
+#------------------------------------------------Функции#------------------------------------------------
+# Функция для генерации пароля
+# Для генерации пароля используется : знаки препинания, цифры и английский алфавит. За исключением спорных символов.
 function Get-Password ($length = 10) {
-    $punctuation = 33..46
-    $digits = 50..57
-    $letters = 65..72 + 74..75 + 78 + 80..90 + 97..104 + 106..107 + 109..110 + 112..122
+    $punctuation = 33..46 # Знаки препинания в таблице ASCII
+    $digits = 50..57 #Цифры в таблице ASCII
+    $letters = 65..72 + 74..75 + 78 + 80..90 + 97..104 + 106..107 + 109..110 + 112..122 #Буквы английского алфавита
     $randomCharacters = $punctuation + $digits + $letters
     $passwordArray = Get-Random -Count $length -InputObject $randomCharacters
     $password = -join ($passwordArray | ForEach-Object { [char]$_ })
     return $password
 } 
-
+# Функция для транслитирации логина
 function Get-Translit {
     param([string]$inString)
     #Создаем хэш-таблицу соответствия русских и латинских символов
@@ -130,5 +140,4 @@ function Get-Translit {
         $outString += $Translit[$char] 
     }
     return $outString
- 
 }
