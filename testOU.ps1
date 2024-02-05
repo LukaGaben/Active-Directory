@@ -23,8 +23,9 @@ $usersAD = Get-aduser -Filter * -Properties * #Список всех сотру�
 $userFullName = ($userData.FullName).Trim() # Помещаем полное ФИО в переменную
 $userSurname, $userName, $userMidlName = $userFullName -split ' '  # Разбиваем ФИО на свои переменные 
 #Проверка, что Отчество не пустое
-if ($null -eq $userMidlName) {
-    writeLog "Не указанно отчество"
+if (-not ($userName -eq '' -or $userSurname -eq '' -or $userMidlName -eq '')) {
+    writeLog "ФИО указанно не полностью. Работа скрипта завершина "
+    break
 }
 writeLog "Создание логина...."
 $usershortName = (Get-Translit "$($userName[0]).$userSurname") #Формируем логин и отправляем его в транлитерацию 
