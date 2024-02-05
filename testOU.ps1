@@ -14,7 +14,7 @@ if (-not (Test-Path $folderPath -PathType Container)) {
 }
 $logFile = $folderPath + "\" + $logFile #Формируем лог файл
 #------------------------------------------------Общие данные------------------------------------------------#
-writeLog "Импорт файлов"
+writeLog "Импорт файлов `n"
 $userData = Import-Csv C:\1\useerData.csv 
 $core = "OU=R7 Group,DC=r7-group,DC=local" #Путь до кореной OU
 $ouList = Get-ADOrganizationalUnit -SearchBase $core -filter * | Select-Object -ExpandProperty DistinguishedName  #Получаем список OU которые относятся к департаментам
@@ -24,9 +24,7 @@ $userFullName = ($userData.FullName).Trim() # Помещаем полное ФИ
 $userSurname, $userName, $userMidlName = $userFullName -split ' '  # Разбиваем ФИО на свои переменные 
 #Проверка, что Отчество не пустое
 if ($null -eq $userMidlName) {
-    Write-Host "Не указанно отчество"
     writeLog "Не указанно отчество"
-
 }
 writeLog "Создание логина...."
 $usershortName = (Get-Translit "$($userName[0]).$userSurname") #Формируем логин и отправляем его в транлитерацию 
@@ -34,31 +32,29 @@ if ($usersAD.samaccountname -contains $usershortName) {
     #Проверям, существует ли уже такой логин
     $usershortName = (Get-Translit "$($userName[0])+$($userMidlName[0]).$userSurname") # Если такой логин найден, то формируем новый с использованием отчества 
 }   
-writeLog "Логин создан для сотрудника $($userFullName) - $($usershortName)"
+writeLog "Логин для $($userFullName) - $($usershortName)`n"
 #------------------------------------------------Поиск Руководителя------------------------------------------------#
 $manager = ($userData.Manager).Trim() # ФИО руководителя
-writeLog "Поиск Руководителя"  
-try {
-    $managerAD = $usersAD | Where-Object { $_.DisplayName -like "*$manager*" } # Ищем сотрудника по ФИО
-}
-catch {
-    writeLog "Ошибка, руководитель не найден"
+writeLog "Поиск руководителя"  
+$managerAD = $usersAD | Where-Object { $_.DisplayName -like "*$manager*" } # Ищем сотрудника по ФИО
+if ($null -eq $managerAD) {
+    writeLog "Руководитель не найден. Информацря не будет заполнена в карточку сотрудника `n"
 }
 #------------------------------------------------Формирование пароля------------------------------------------------#
-writeLog "Создание пароля для сотрудника $($userFullName)"
+writeLog "Создание пароля для сотрудника $($userFullName)`n"
 $userPassword = ConvertTo-SecureString -String (Get-Password) -AsPlainText -Force
 #------------------------------------------------Выбор OU------------------------------------------------#
 $userDepartment = ($userData.Department).Trim() #Выбираем Департамент
 $userOU = "OU=" + $userDepartment + "," + $core # Формируем название OU в которую надо положить УЗ
-writeLog "Проверка контейнера" 
+writeLog "Проверка OU" 
 if (($ouList -contains $userOU) -and ($null -ne $userOU)) {
     # Если OU не пустая и есть в домене - то все ок
     $OU = "OU=User," + $userOU #Формируем окончательнный путь до OU
-    writeLog "Учетная запись сотрудника $($userFullName) будет создана в $($OU)"
+    writeLog "Учетная запись сотрудника $($userFullName) будет создана в $($OU) `n"
 }
 else { 
-    writeLog "Ошибка в название департамента и департамент не задан. Учетная сотрудника $($userFullName) запись будет помещена в $OU"
     $OU = [ref]$core # Помещаем УЗ в Корень
+    writeLog "Ошибка в название департамента и департамент не задан. Учетная сотрудника $($userFullName) запись будет помещена в $OU `n"
 }
 #------------------------------------------------Сбор всех данных вместе ------------------------------------------------#
 $ipPhone = ($userData.phone).Trim()
@@ -92,8 +88,15 @@ try {
     writeLog "Учетная запись создана успешно"
 
 }
+catch [Microsoft.ActiveDirectory.Management.ADIdentityAlreadyExistsException] {
+    # Обработка конкретной ошибки
+    $errorMessage = "Error: Такая учетная записоь уже существует"
+    writeLog $errorMessage
+}
 catch {
-    writeLog "Ошибка создания учетной записи"
+    # Общая обработка ошибок
+    $errorMessage = "An unexpected error occurred. $_"
+    writeLog $errorMessage
 }
 #Add-ADGroupMember -Identity "fa DOM К31_Лобачевского RW"  -Members $usersAD
 function Get-Password ($length = 10) {
