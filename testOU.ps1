@@ -19,22 +19,32 @@ $userData = Import-Csv C:\1\useerData.csv
 $globalDomain = "@r7-group.ru"
 $core = "OU=R7 Group,DC=r7-group,DC=local"
 $company = '"Р7 Групп"'
-$ouList = Get-ADOrganizationalUnit -SearchBase $core -filter * | Select-Object -ExpandProperty DistinguishedName
-$usersAD = Get-aduser -Filter * -Properties *
-
-
-$userFullName = $userData.FullName 
+#$ouList = Get-ADOrganizationalUnit -SearchBase $core -filter * | Select-Object -ExpandProperty DistinguishedName
+#$usersAD = Get-aduser -Filter * -Properties *
+$userFullName = ($userData.FullName).Trim()
 $userSurname, $userName, $userMidlName = $userFullName -split ' '  
 if ($null -eq $userMidlName) {
     Write-Host "Не указанно отчество"
+    writeLog "Не указанно отчество"
     break
 }
+writeLog "Создание логина...."
 $usershortName = (Get-Translit "$($userName[0]).$userSurname") 
 if ($usersAD -contains $usershortName) {
     $usershortName = (Get-Translit "$($userName[0])+$($userMidlName[0]).$userSurname")
 }   
+writeLog "Логин создан $($usershortName)"
+
 $manager = $userData.Manager
-$managerAD = Get-aduser -Filter { displayname -eq $manager }
+writeLog "Поиск манагера"  
+try {
+    $managerAD = Get-aduser -Filter { displayname -eq $manager }
+}
+catch {
+    writeLog "Ошибка, манагер не найден"
+    Write-Host "Манагер не найден"
+}
+writeLog "Создание пароля для сотрудника $($usershortName)"
 $AccountPassword = ConvertTo-SecureString -String (Get-Password) -AsPlainText -Force
 $userDepartment = $userData.Department
 $userDivision = $userData.Division
@@ -43,11 +53,13 @@ $userOU = "OU=" + $userDepartment + "," + $core
 $usreMailAddress = $usershortName + $globalDomain 
 $ipPhone = $userData.phone
 $userOfficePhone = "+7(495)988-47-77#$($ipPhone)"
+writeLog "Проверка контейнера"
 if (($ouList -contains $userOU) -and ($null -ne $userOU)) { 
     $OU = "OU=User,", $userOU
+    writeLog "Учетная запись сотрудника $($userName) будет создана в $($OU)"
 }
 else { 
-    Write-Host "Ошибка в название департамента и департамент не задан. Учетная сотрудника $($userFullName) запись будет помещена в корень"
+    writeLog "Ошибка в название департамента и департамент не задан. Учетная сотрудника $($userFullName) запись будет помещена в $OU"
     $OU = $core
 }
 $other = @{
@@ -72,8 +84,17 @@ $userAttrubute = @{
     OtherAttributes = $other
 
 }
+writeLog "Создание учетной записи сотрудника "
+try {
 
-New-aduser @userAttrubute 
+    New-aduser @userAttrubute 
+    writeLog "Учетная запись создана успешно"
+}
+catch {
+
+writeLog "Ошибка создания учетной записи"
+}
+
 
 Add-ADGroupMember -Identity "fa DOM К31_Лобачевского RW"  -Members $usersAD
 function Get-Password ($length = 10) {
