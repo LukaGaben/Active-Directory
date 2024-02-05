@@ -1,102 +1,101 @@
-﻿#import data from file 
+﻿#------------------------------------------------Логирование------------------------------------------------#
+#Функция написания лога
 function writeLog {
     Param ($logString)
     Write-Output $logString
     Write-Output $logString >> $logFile
 }
-$nameFile = "Create User"
 $date = Get-Date -f yyyy-MM-dd-HHmmss
-$logFile = $nameFile + "_" + $date + ".log"
+$logFile = "Create User_" + $date + ".log"
 $folderPath = "C:\results"
+#Проверка наличия папки, куда будем складывать логи
 if (-not (Test-Path $folderPath -PathType Container)) {
-    # Если папки нет, то создаем её
-    New-Item -ItemType Directory -Path $folderPath -ErrorAction SilentlyContinue | Out-Null
+    New-Item -ItemType Directory -Path $folderPath -ErrorAction SilentlyContinue | Out-Null # Если папки нет, то создаем её
 }
-$logFile = $folderPath + "\" + $logFile
-#-----------------------------------------------------------------------------------------------------------------------------------------------#
+$logFile = $folderPath + "\" + $logFile #Формируем лог файл
+#------------------------------------------------Общие данные------------------------------------------------#
 writeLog "Импорт файлов"
 $userData = Import-Csv C:\1\useerData.csv 
-$globalDomain = "@r7-group.ru"
-$core = "OU=R7 Group,DC=r7-group,DC=local"
-$company = '"Р7 Групп"'
-#$ouList = Get-ADOrganizationalUnit -SearchBase $core -filter * | Select-Object -ExpandProperty DistinguishedName
-#$usersAD = Get-aduser -Filter * -Properties *
-$userFullName = ($userData.FullName).Trim()
-$userSurname, $userName, $userMidlName = $userFullName -split ' '  
+$core = "OU=R7 Group,DC=r7-group,DC=local" #Путь до кореной OU
+$ouList = Get-ADOrganizationalUnit -SearchBase $core -filter * | Select-Object -ExpandProperty DistinguishedName  #Получаем список OU которые относятся к департаментам
+$usersAD = Get-aduser -Filter * -Properties * #Список всех сотрудников
+#------------------------------------------------Формируем логин------------------------------------------------#
+$userFullName = ($userData.FullName).Trim() # Помещаем полное ФИО в переменную
+$userSurname, $userName, $userMidlName = $userFullName -split ' '  # Разбиваем ФИО на свои переменные 
+#Проверка, что Отчество не пустое
 if ($null -eq $userMidlName) {
     Write-Host "Не указанно отчество"
     writeLog "Не указанно отчество"
-    break
+
 }
 writeLog "Создание логина...."
-$usershortName = (Get-Translit "$($userName[0]).$userSurname") 
-if ($usersAD -contains $usershortName) {
-    $usershortName = (Get-Translit "$($userName[0])+$($userMidlName[0]).$userSurname")
+$usershortName = (Get-Translit "$($userName[0]).$userSurname") #Формируем логин и отправляем его в транлитерацию 
+if ($usersAD.samaccountname -contains $usershortName) {
+    #Проверям, существует ли уже такой логин
+    $usershortName = (Get-Translit "$($userName[0])+$($userMidlName[0]).$userSurname") # Если такой логин найден, то формируем новый с использованием отчества 
 }   
-writeLog "Логин создан $($usershortName)"
-
-$manager = $userData.Manager
-writeLog "Поиск манагера"  
+writeLog "Логин создан для сотрудника $($userFullName) - $($usershortName)"
+#------------------------------------------------Поиск Руководителя------------------------------------------------#
+$manager = ($userData.Manager).Trim() # ФИО руководителя
+writeLog "Поиск Руководителя"  
 try {
-    $managerAD = Get-aduser -Filter { displayname -eq $manager }
+    $managerAD = $usersAD | Where-Object { $_.DisplayName -like "*$manager*" } # Ищем сотрудника по ФИО
 }
 catch {
-    writeLog "Ошибка, манагер не найден"
-    Write-Host "Манагер не найден"
+    writeLog "Ошибка, руководитель не найден"
 }
-writeLog "Создание пароля для сотрудника $($usershortName)"
-$AccountPassword = ConvertTo-SecureString -String (Get-Password) -AsPlainText -Force
-$userDepartment = $userData.Department
-$userDivision = $userData.Division
-$jobTitle = $userData.Title 
-$userOU = "OU=" + $userDepartment + "," + $core 
-$usreMailAddress = $usershortName + $globalDomain 
-$ipPhone = $userData.phone
-$userOfficePhone = "+7(495)988-47-77#$($ipPhone)"
-writeLog "Проверка контейнера"
-if (($ouList -contains $userOU) -and ($null -ne $userOU)) { 
-    $OU = "OU=User,", $userOU
-    writeLog "Учетная запись сотрудника $($userName) будет создана в $($OU)"
+#------------------------------------------------Формирование пароля------------------------------------------------#
+writeLog "Создание пароля для сотрудника $($userFullName)"
+$userPassword = ConvertTo-SecureString -String (Get-Password) -AsPlainText -Force
+#------------------------------------------------Выбор OU------------------------------------------------#
+$userDepartment = ($userData.Department).Trim() #Выбираем Департамент
+$userOU = "OU=" + $userDepartment + "," + $core # Формируем название OU в которую надо положить УЗ
+writeLog "Проверка контейнера" 
+if (($ouList -contains $userOU) -and ($null -ne $userOU)) {
+    # Если OU не пустая и есть в домене - то все ок
+    $OU = "OU=User," + $userOU #Формируем окончательнный путь до OU
+    writeLog "Учетная запись сотрудника $($userFullName) будет создана в $($OU)"
 }
 else { 
     writeLog "Ошибка в название департамента и департамент не задан. Учетная сотрудника $($userFullName) запись будет помещена в $OU"
-    $OU = $core
+    $OU = [ref]$core # Помещаем УЗ в Корень
 }
+#------------------------------------------------Сбор всех данных вместе ------------------------------------------------#
+$ipPhone = ($userData.phone).Trim()
+#ХЭШ талиблица для других атрибутов
 $other = @{
     ipPhone = $ipPhone
 }
+# Основная ХЭЩ таблица
 $userAttrubute = @{
-    Name            = $usershortName
-    GivenName       = $userName
-    Surname         = $userSurname
-    Company         = $company
-    Department      = $userDivision
-    Description     = $jobTitle
-    DisplayName     = $userFullName
-    EmailAddress    = $usreMailAddress
-    Enabled         = $true
-    Manager         = $managerAD
-    Path            = $OU
-    SamAccountName  = $usershortName
-    Title           = $jobTitle
-    AccountPassword = $AccountPassword
-    OfficePhone     = $userOfficePhone
-    OtherAttributes = $other
-
+    Name              = $userFullName
+    GivenName         = $userName
+    Surname           = $userSurname
+    Company           = '"Р7 Групп"'
+    userPrincipalName = $usershortName + "@r7-group.local"
+    Department        = $userData.Division.Trim()
+    Description       = $userData.Title.Trim()
+    DisplayName       = $userFullName
+    EmailAddress      = $usershortName + "@r7-group.ru"
+    Enabled           = $true
+    Manager           = $managerAD
+    Path              = $OU
+    SamAccountName    = $usershortName
+    Title             = $userData.Title.Trim() 
+    AccountPassword   = $userPassword 
+    OfficePhone       = "+7(495)988-47-77#$($ipPhone)"
+    OtherAttributes   = $other
 }
 writeLog "Создание учетной записи сотрудника "
 try {
-
     New-aduser @userAttrubute 
     writeLog "Учетная запись создана успешно"
+
 }
 catch {
-
-writeLog "Ошибка создания учетной записи"
+    writeLog "Ошибка создания учетной записи"
 }
-
-
-Add-ADGroupMember -Identity "fa DOM К31_Лобачевского RW"  -Members $usersAD
+#Add-ADGroupMember -Identity "fa DOM К31_Лобачевского RW"  -Members $usersAD
 function Get-Password ($length = 10) {
     $punctuation = 33..46
     $digits = 50..57
@@ -106,7 +105,7 @@ function Get-Password ($length = 10) {
     $password = -join ($passwordArray | ForEach-Object { [char]$_ })
     return $password
 } 
-Get-Password
+
 function Get-Translit {
     param([string]$inString)
     #Создаем хэш-таблицу соответствия русских и латинских символов
@@ -127,9 +126,5 @@ function Get-Translit {
         $outString += $Translit[$char] 
     }
     return $outString
-    
+ 
 }
-$aas = "Косьяненко Полина Владимировна"
-Get-Translit $aas
-Get-Password
-#Creat-User $userData
