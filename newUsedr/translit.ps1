@@ -40,6 +40,7 @@ function Get-Login {
     }   
     writeLog "Логин для $($userFullName) - $($userShortName)`n"
     $loginData = [PSCustomObject]@{
+    userFullName = $userFullName
         userShortName = $userShortName
         userSurname   = $userSurname
         userName      = $userName
@@ -47,7 +48,10 @@ function Get-Login {
     }
     return  $loginData
 }
-[string]$loginData = Get-Login $userData 
+$login = Get-Login $userData 
+#$userFullName = ($userData.FullName).Trim() # Помещаем полное ФИО в переменную
+
+Write-Output $login.username
 
 #------------------------------------------------Поиск Руководителя------------------------------------------------#
 $manager = ($userData.Manager).Trim() # ФИО руководителя
@@ -80,27 +84,29 @@ $other = @{
 }
 # Основная ХЭЩ таблица для заполнения необходимых атрибутов
 $userAttrubute = @{
-    Name              = $userFullName
-    GivenName         = $loginData.userName
-    Surname           = $loginData.userSurname
+    Name              = $login.userFullName
+    GivenName         = $login.userName
+    Surname           = $login.userSurname
     Company           = '"Р7 Групп"'
-    userPrincipalName = $loginData.userShortName + "@r7-group.local"
+    userPrincipalName = $login.userShortName + "@r7-group.local"
     Department        = $userData.Division.Trim()
     Description       = $userData.Title.Trim()
     DisplayName       = $userFullName
-    EmailAddress      = $loginData.userShortName + "@r7-group.ru"
+    EmailAddress      = $login.userShortName + "@r7-group.ru"
     Enabled           = $true
     Manager           = $managerAD
     Path              = $OU
-    SamAccountName    = $loginData.userShortName
+    SamAccountName    = $login.userShortName
     Title             = $userData.Title.Trim() 
     AccountPassword   = $userPassword 
     OfficePhone       = "+7(495)988-47-77#$($ipPhone)"
     OtherAttributes   = $other
 }
+$userAttrubute 
 #------------------------------------------------Создание учетной записи------------------------------------------------#
 writeLog "Создание учетной записи сотрудника "
-try {
+New-aduser @userAttrubute # Запускаем создание учетной записи 
+<#try {
     New-aduser @userAttrubute # Запускаем создание учетной записи 
     writeLog "Учетная запись создана успешно"
 
@@ -115,6 +121,13 @@ catch {
     $errorMessage = "An unexpected error occurred. $_"
     writeLog $errorMessage
 }
+
+
+
+
+
+
+#>
 #------------------------------------------------Добавление в группы------------------------------------------------#
 #Add-ADGroupMember -Identity "fa DOM К31_Лобачевского RW"  -Members $usersAD
 
