@@ -46,7 +46,6 @@ foreach ($folder in $folders) {
             $errorMessage = $_.Exception.Message
             writeLog "Error in folder $subFoldersPath : $errorMessage"
         }
-        
         $dd += $a
     }
     New-Item -ItemType Directory -Path $resultFolderPath -ErrorAction SilentlyContinue | Out-Null # Если папки нет, то создаем её   

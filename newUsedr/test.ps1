@@ -1,73 +1,47 @@
+$corePpath = "\\ukkalita.local\iptg\Дивизион управления недвижимостью\DOM\Shared docs c Коткова"
+$folders = Get-ChildItem -Path $corePpath -Directory 
+$DOM = Get-NFTS $corePpath
 
-$corePpath = "\\ukkalita.local\iptg\Дивизион управления недвижимостью\DOM\Система качества, сертификаты"
-$folders = Get-ChildItem -Path $corePpath -Directory -Recurse
-$dd = @()
-function Get-Nfts {
-    param (
-        [string]$Path
-    )
-    $output = @()
-    #$output += "DIR: $Path `n"
-    $folderAccess = Get-Item -Path $Path #-Directory 
-    $folderACL = (Get-Item -Path $folderAccess.FullName | Get-Acl).Access | Select-Object -Property IdentityReference, FileSystemRights, AccessControlType, IsInherited
-    $folderACL | Add-Member -MemberType NoteProperty -name "path" -Value $Path | ft
-    $output += $folderACL
-    $output
+
+function writeLog {
+    Param ($logString)
+    Write-Output $logString
+    Write-Output $logString >> $logFile
 }
+$date = Get-Date -f yyyy-MM-dd-HHmmss
+$logFileName = "NFTS_" + $date + ".log"
+$folderPath = "C:\results"
+#Проверка наличия папки, куда будем складывать логи
+if (-not (Test-Path $folderPath -PathType Container)) {
+    New-Item -ItemType Directory -Path $folderPath -ErrorAction SilentlyContinue | Out-Null # Если папки нет, то создаем её
+}
+$logFile = Join-Path $folderPath $logFileName #Формируем лог файл
 
+
+#________________________________________________________________________________________________________________________________________________________________________________________________________________#
 foreach ($folder in $folders) {
- 
-    $foldersPath = $folder.FullName
-    $a = Get-Nfts $foldersPath |ft
-    $dd += $a
-    break
+    $folFolder = (Get-Item $folder.fullName).FullName # Данные по папке текущей 
+    $subFolders = Get-ChildItem -Path $folFolder -Directory -Recurse
+    
+    
+    
+    $logFileName = $NFTS + ".csv" 
+    $log = Join-Path $resultNFTSFolderPath $logFileName
+    
+    $dd | select IdentityReference, FileSystemRights, AccessControlType, IsInherited, path, AreAccessRulesProtected | Export-csv $log -Encoding Default -Delimiter "," -NoTypeInformation
 }
-$dd
- $dd | select IdentityReference, FileSystemRights, AccessControlType, IsInherited, path| Export-csv C:\script\test.csv -Encoding UTF8 -Delimiter ";" -NoTypeInformation 
- 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
- $corePpath = "\\ukkalita.local\iptg\Дивизион управления недвижимостью\DOM\Система качества, сертификаты"
-$folders = Get-ChildItem -Path $corePpath -Directory -Recurse
-$dd = @()
-function Get-Nfts {
+function AddResultFoldes {
     param (
-        [string]$Path
+        $folder
     )
-    $output = @()
-    #$output += "DIR: $Path `n"
-    $folderAccess = Get-Item -Path $Path #-Directory 
-    $folderACL = (Get-Item -Path $folderAccess.FullName | Get-Acl).Access | Select-Object -Property IdentityReference, FileSystemRights, AccessControlType, IsInherited
-    $folderACL | Add-Member -MemberType NoteProperty -name "path" -Value $Path
-    $output += $folderACL
-    $output
+    $NFTS = (($folder.FullName).replace("\\ukkalita.local\iptg\Дивизион управления недвижимостью\", "")).replace("\", "__")
+    $nftsFolderPath = "C:\results\NFTS\"
+    # если папки нет = то создаем
+    if (-not (Test-Path  $nftsFolderPath -PathType Container)) {
+        New-Item -ItemType Directory -Path  $nftsFolderPath -ErrorAction SilentlyContinue | Out-Null # Если папки нет, то создаем её
+    }
+    $resultNFTSFolderPath = $nftsFolderPath + $folder
+    New-Item -ItemType Directory -Path $resultNFTSFolderPath -ErrorAction SilentlyContinue | Out-Null # Если папки нет, то создаем её
 }
-
-foreach ($folder in $folders) {
- 
-    $foldersPath = $folder.FullName
-    $a = Get-Nfts $foldersPath
-    $dd += $a
-}
-
-$dd | select IdentityReference, FileSystemRights, AccessControlType, IsInherited, path | Export-csv C:\script\test.csv -Encoding Default -Delimiter "," -NoTypeInformation
-
-
-
-$
