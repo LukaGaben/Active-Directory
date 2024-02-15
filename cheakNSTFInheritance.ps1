@@ -1,4 +1,5 @@
 ﻿$Pathes = Import-Csv "C:\001\path.csv"
+
 foreach ($path in $Pathes) {
     $path = $path.name
     $corePath = "\\ukkalita.local\iptg\Дивизион управления недвижимостью\" + $Path
