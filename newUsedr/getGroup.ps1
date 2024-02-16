@@ -5,7 +5,7 @@ function Get-ADUserGroup {
         $user
     )
     $groupList = @()
-    $userListGroup = ($user | select MemberOf).memberof  | Where-Object { $_ -like "*folder access*" }
+    $userListGroup = ($user | select MemberOf).memberof # | Where-Object { $_ -like "*folder access*" }
     foreach ($element in $userListGroup) {
         $group = ($element.replace("CN=", "")).split(",")[0]  
         $groupList += [PSCustomObject]@{

@@ -1,6 +1,34 @@
-﻿$corePpath = "\\ukkalita.local\iptg\Дивизион управления недвижимостью\DOM\"
-$folders = Get-ChildItem -Path $corePpath -Directory 
-
+﻿function New-FolderFromPath {
+    param (
+        $folder # Сюда путь или объект по выборки fullname
+    )
+    # Разбиваем строку
+    $a = $folder.split("\")  
+    # Получаем предпоследний элемент
+    $parentNFTS = $a[-2]
+    # Получаем последний элемент
+    $NFTS = $a[-1]
+    # Базовая папка, где будут создаваться папки для скрипта Get-NFTS
+    $nftsFolderPath = "C:\results\NFTS\"
+    # Если папки нет, то создаем
+    if (-not (Test-Path $nftsFolderPath -PathType Container)) {
+        New-Item -ItemType Directory -Path $nftsFolderPath -ErrorAction SilentlyContinue | Out-Null
+    }
+    # Создаем путь к папке, которую нужно проверить
+    $cheakFolder = Join-Path $nftsFolderPath $parentNFTS
+    # Получаем список папок в базовой папке
+    $listCheakFolder = (Get-ChildItem $nftsFolderPath).FullName
+    # Если папка существует, то создаем путь к новой папке
+    if ($listCheakFolder -contains $cheakFolder) {
+        $resultNFTSFolderPath = join-path $cheakFolder $NFTS
+    }
+    else {
+        $resultNFTSFolderPath = Join-Path $nftsFolderPath $NFTS
+    }
+    # Создаем новую папку
+    New-Item -ItemType Directory -Path $resultNFTSFolderPath -ErrorAction SilentlyContinue | Out-Null
+    return $resultNFTSFolderPath
+}
 function writeLog {
     Param ($logString)
     Write-Output $logString
@@ -26,16 +54,17 @@ function Get-Nfts {
     $output += $folderACL
     $output
 }
-$resultFolderPath = "C:\results\NFTS\"
-if (-not (Test-Path $resultFolderPath -PathType Container)) {
-    New-Item -ItemType Directory -Path $resultFolderPath -ErrorAction SilentlyContinue | Out-Null # Если папки нет, то создаем её
-}
+#_______________________________________________________________________________________________________________________________________________________________________________________________________________#
+$corePath = "\\ukkalita.local\iptg\Дивизион управления недвижимостью\DOM"
+$folders = Get-ChildItem -Path $corePath -Directory 
+$pathDOM = New-FolderFromPath $corePath
+$logDOM = Join-Path $pathDOM "DOM.csv"
+Get-Nfts $corePpath| select IdentityReference, FileSystemRights, AccessControlType, IsInherited, AreAccessRulesProtected, path | Export-csv $logDOM -Encoding Default -Delimiter "," -NoTypeInformation
 $dd = @()
 foreach ($folder in $folders) {
-    $subFolders = Get-ChildItem -Path $corePpath -Directory -Recurse
+    $subFolders = Get-ChildItem -Path $folder.FullName -Directory -Recurse
     $NFTS = (( $folder.FullName).replace("\\ukkalita.local\iptg\Дивизион управления недвижимостью\", "")).replace("\", "__")
     $logFileName = $NFTS + ".csv" 
-    $resultFolderPath = $resultFolderPath + $folder
     foreach ($subFolder in $subFolders) {
         $subFoldersPath = $subFolder.FullName
         try {
@@ -48,7 +77,7 @@ foreach ($folder in $folders) {
         }
         $dd += $a
     }
-    New-Item -ItemType Directory -Path $resultFolderPath -ErrorAction SilentlyContinue | Out-Null # Если папки нет, то создаем её   
-    $log = Join-Path $resultFolderPath $logFileName
+    $resultNFTSFolderPath =  New-FolderFromPath $folder.fullname
+    $log = Join-Path $resultNFTSFolderPath $logFileName
     $dd | select IdentityReference, FileSystemRights, AccessControlType, IsInherited, AreAccessRulesProtected, path | Export-csv $log -Encoding Default -Delimiter "," -NoTypeInformation
 }
