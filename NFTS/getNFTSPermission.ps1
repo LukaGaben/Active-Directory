@@ -49,7 +49,7 @@ function Get-Nfts {
     $output = @()
     #$output += "DIR: $Path `n"
     $folderAccess = Get-Item -Path $Path #-Directory 
-    $folderACL = (Get-Item -Path $folderAccess.FullName | Get-Acl).Access | Select-Object -Property IdentityReference, FileSystemRights, AccessControlType, IsInherited, AreAccessRulesProtected
+    $folderACL = (Get-Item -Path $folderAccess.FullName | Get-Acl).Access | Select-Object -Property IdentityReference, FileSystemRights, AccessControlType, IsInherited
     $folderACL | Add-Member -MemberType NoteProperty -name "path" -Value $Path
     $output += $folderACL
     $output
@@ -59,12 +59,14 @@ $corePath = "\\ukkalita.local\iptg\Дивизион управления нед�
 $folders = Get-ChildItem -Path $corePath -Directory 
 $pathDOM = New-FolderFromPath $corePath
 $logDOM = Join-Path $pathDOM "DOM.csv"
-Get-Nfts $corePpath| select IdentityReference, FileSystemRights, AccessControlType, IsInherited, AreAccessRulesProtected, path | Export-csv $logDOM -Encoding Default -Delimiter "," -NoTypeInformation
+Get-Nfts $corePath | select IdentityReference, FileSystemRights, AccessControlType, IsInherited, path | Export-csv $logDOM -Encoding Default -Delimiter ";" -NoTypeInformation
 $dd = @()
 foreach ($folder in $folders) {
+    $f = get-nfts $folder.fullname
     $subFolders = Get-ChildItem -Path $folder.FullName -Directory -Recurse
-    $NFTS = (( $folder.FullName).replace("\\ukkalita.local\iptg\Дивизион управления недвижимостью\", "")).replace("\", "__")
+    $NFTS = (($folder.FullName).replace("\\ukkalita.local\iptg\Дивизион управления недвижимостью\", "")).replace("\", "__")
     $logFileName = $NFTS + ".csv" 
+    $logFileName2 = "parent " + $NFTS + ".csv" 
     foreach ($subFolder in $subFolders) {
         $subFoldersPath = $subFolder.FullName
         try {
@@ -77,7 +79,9 @@ foreach ($folder in $folders) {
         }
         $dd += $a
     }
-    $resultNFTSFolderPath =  New-FolderFromPath $folder.fullname
-    $log = Join-Path $resultNFTSFolderPath $logFileName
-    $dd | select IdentityReference, FileSystemRights, AccessControlType, IsInherited, AreAccessRulesProtected, path | Export-csv $log -Encoding Default -Delimiter "," -NoTypeInformation
+    $resultNFTSFolderPath = New-FolderFromPath $folder.fullname
+    $log = Join-Path $resultNFTSFolderPath $logFileName2
+    $log2 = Join-Path $resultNFTSFolderPath $logFileName
+    $f | select IdentityReference, FileSystemRights, AccessControlType, IsInherited, path | Export-csv $log2 -Encoding Default -Delimiter ";" -NoTypeInformation
+    $dd | select IdentityReference, FileSystemRights, AccessControlType, IsInherited, path | Export-csv $log -Encoding Default -Delimiter ";" -NoTypeInformation
 }

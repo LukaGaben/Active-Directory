@@ -19,12 +19,12 @@ $folderPath = "C:\results\Group"
 if (-not (Test-Path $folderPath -PathType Container)) {
     New-Item -ItemType Directory -Path $folderPath -ErrorAction SilentlyContinue | Out-Null # Если папки нет, то создаем её
 }
-$date = Get-Date -f yyyy-MM-dd-HHmmss
+
 
 foreach ($userAD in $usersAD) {
     $data = Get-ADUserGroup $userAD
     $userName = $userAD.name
-    $logFileName = $userName + $date + ".log"
+    $logFileName = $userName + "__" + $date + ".log"
     $fullPath = Join-Path $folderPath $logFileName
     $data | Export-Csv $fullPath -Encoding Default -Delimiter "," -NoTypeInformation
 }
