@@ -29,11 +29,13 @@
     New-Item -ItemType Directory -Path $resultNFTSFolderPath -ErrorAction SilentlyContinue | Out-Null
     return $resultNFTSFolderPath
 }
+# Функция для записи логов
 function writeLog {
     Param ($logString)
     Write-Output $logString
     Write-Output $logString >> $logFile
 }
+# Начало формирования имени логов 
 $date = Get-Date -f yyyy-MM-dd-HHmmss
 $logFileName = "NFTS_" + $date + ".log"
 $folderPath = "C:\results"
@@ -42,31 +44,34 @@ if (-not (Test-Path $folderPath -PathType Container)) {
     New-Item -ItemType Directory -Path $folderPath -ErrorAction SilentlyContinue | Out-Null # Если папки нет, то создаем её
 }
 $logFile = Join-Path $folderPath $logFileName #Формируем лог файл
+# Функция получения прав на папке 
 function Get-Nfts {
     param (
         [string]$Path
     )
-    $output = @()
-    #$output += "DIR: $Path `n"
-    $folderAccess = Get-Item -Path $Path #-Directory 
+    $output = @() # Пустой массив куда будем складывать результат 
+    $folderAccess = Get-Item -Path $Path 
     $folderACL = (Get-Item -Path $folderAccess.FullName | Get-Acl).Access | Select-Object -Property IdentityReference, FileSystemRights, AccessControlType, IsInherited
     $folderACL | Add-Member -MemberType NoteProperty -name "path" -Value $Path
     $output += $folderACL
     $output
 }
 #_______________________________________________________________________________________________________________________________________________________________________________________________________________#
+
+# Сначала получаем данные по корню DOM
 $corePath = "\\ukkalita.local\iptg\Дивизион управления недвижимостью\DOM"
 $folders = Get-ChildItem -Path $corePath -Directory 
 $pathDOM = New-FolderFromPath $corePath
 $logDOM = Join-Path $pathDOM "DOM.csv"
 Get-Nfts $corePath | select IdentityReference, FileSystemRights, AccessControlType, IsInherited, path | Export-csv $logDOM -Encoding Default -Delimiter ";" -NoTypeInformation
-$dd = @()
+$childFolder = @() #Массив куда будем складывать конечный результат 
 foreach ($folder in $folders) {
-    $f = get-nfts $folder.fullname
-    $subFolders = Get-ChildItem -Path $folder.FullName -Directory -Recurse
-    $NFTS = (($folder.FullName).replace("\\ukkalita.local\iptg\Дивизион управления недвижимостью\", "")).replace("\", "__")
-    $logFileName = $NFTS + ".csv" 
-    $logFileName2 = "parent " + $NFTS + ".csv" 
+    $parentFolder = get-nfts $folder.fullname # Получаем путь родительской папки 
+    $subFolders = Get-ChildItem -Path $folder.FullName -Directory -Recurse # список всех папок внутри родительской
+    $NFTS = (($folder.FullName).replace("\\ukkalita.local\iptg\Дивизион управления недвижимостью\", "")).replace("\", "__") # части имени
+    $logFileName = $NFTS + ".csv" # конечное имя 
+    $parentLogFileName = "parent " + $NFTS + ".csv" # имя для родительской папки 
+    # цикл для получения прав 
     foreach ($subFolder in $subFolders) {
         $subFoldersPath = $subFolder.FullName
         try {
@@ -77,11 +82,11 @@ foreach ($folder in $folders) {
             $errorMessage = $_.Exception.Message
             writeLog "Error in folder $subFoldersPath : $errorMessage"
         }
-        $dd += $a
+        $childFolder += $a # получаем данные 
     }
     $resultNFTSFolderPath = New-FolderFromPath $folder.fullname
-    $log = Join-Path $resultNFTSFolderPath $logFileName2
-    $log2 = Join-Path $resultNFTSFolderPath $logFileName
-    $f | select IdentityReference, FileSystemRights, AccessControlType, IsInherited, path | Export-csv $log2 -Encoding Default -Delimiter ";" -NoTypeInformation
-    $dd | select IdentityReference, FileSystemRights, AccessControlType, IsInherited, path | Export-csv $log -Encoding Default -Delimiter ";" -NoTypeInformation
+    $parentLogFileNameLog = Join-Path $resultNFTSFolderPath $parentLogFileName
+    $log = Join-Path $resultNFTSFolderPath $logFileName
+    $parentFolder | select IdentityReference, FileSystemRights, AccessControlType, IsInherited, path | Export-csv $parentLogFileNameLog -Encoding Default -Delimiter ";" -NoTypeInformation
+    $childFolder | select IdentityReference, FileSystemRights, AccessControlType, IsInherited, path | Export-csv $log -Encoding Default -Delimiter ";" -NoTypeInformation
 }
