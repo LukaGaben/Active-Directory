@@ -1,9 +1,10 @@
-﻿$data = Import-Csv 'C:\1\userf.csv' -Delimiter "," # Список всех сотрудников из старого домена со всеми необходимыми атрибутами 
-Import-Module C:\1\translit.ps1
+﻿Import-Module C:\1\translit.ps1
 Import-Module C:\1\writelog.ps1
 Import-Module C:\1\newPassword.ps1
 $core = "OU=Р7 Групп,DC=r7-group,DC=local" #Путь до кореной OU
-#_____________________________________________________________________________________________________________________________________________________
+writelog "Импортируем данные со старого домена"
+$data = Import-Csv 'C:\1\user.csv' -Delimiter "," # Список всех сотрудников из старого домена со всеми необходимыми атрибутами 
+#Функуия для получения OU 
 function Get-OU {
     param (
         $data
@@ -31,50 +32,68 @@ function New-UserAD {
     param (
         $data,
         $OU
-    )
-    $other = @{
-        ipPhone = $data.ipPhone
-    }
+    ) 
+    $userPasswordToCard = Get-Password
+    $userPassword = ConvertTo-SecureString -String $userPasswordToCard -AsPlainText -Force
+    $user = $data.SamAccountName
+    $folderPath = "C:\results"
+    $loginFileName = $data.Name + ".txt"
+    $loginFile = Join-Path $folderPath $loginFileName 
+    $loginName = ($data.SamAccountName).ToLower()
     $userAttrubute = @{
         Name              = $data.DisplayName
         GivenName         = $data.GivenName
         Surname           = $data.Surname
         Company           = '"Р7 Групп"'
-        userPrincipalName = $data.UserPrincipalName
+        userPrincipalName = $loginName + "@r7-group.ru"
         Department        = $data.Department
         Description       = $data.Title
         DisplayName       = $data.DisplayName
-        EmailAddress      = $data.EmailAddress
+        EmailAddress      = ($data.EmailAddress).ToLower()
         Enabled           = $true
         Path              = $OU
-        SamAccountName    = $data.SamAccountName
+        SamAccountName    = $loginName
         Title             = $data.Title
         AccountPassword   = $userPassword 
-        OfficePhone       = $data.OfficePhone   
-        OtherAttributes   = $other 
+        OfficePhone       = $data.OfficePhone 
+
     }
     try {
         New-aduser @userAttrubute ## Запускаем создание учетной записи 
         writeLog "Учетная запись создана успешно"
-        writeLog $data.UserPrincipalName
-        writeLog $userPasswordToCard 
+        writeLogin $data.UserPrincipalName
+        writeLogin $userPasswordToCard 
     }
     catch [Microsoft.ActiveDirectory.Management.ADIdentityAlreadyExistsException] {
         # Обработка ошибки если учетка есть 
         $errorMessage = "Error: Такая учетная записоь уже существует"
         writeLog $errorMessage
     }
+    catch [Microsoft.ActiveDirectory.Management.Commands.NewADUser] {
+        WriteLog "Пароль не подходит $($data.Name)"
+        $userPasswordToCard = Get-Password
+        $userPassword = ConvertTo-SecureString -String $userPasswordToCard -AsPlainText -Force
+        Set-ADAccountPassword -Identity $user -NewPassword $userPassword 
+        Enable-ADAccount -Identity $user
+        writeLogin "Логин = $($data.UserPrincipalName)"
+        writeLogin "Пароль = $($userPasswordToCard)"
+    }
     catch {
-        # Общая обработка ошибок
+        #Общая обработка ошибок
         $errorMessage = "An unexpected error occurred. $_"
         writeLog $errorMessage
     }
+    if ($null -eq $data.ipPhone) {
+        continue
+    }
+    else {
+        
+        $ipPhone = $data.ipPhone
+        set-aduser -Identity $user -ipPhone $ipPhone 
+    }
+    
 }
 function Add-NewUserTOGroup {
-    param (
-        $userData,
-        $OU
-    )
     $OU
     # $OU = $userData.DistinguishedName -replace "CN=[^,]+,", "" #Получаем полный адрес уз в домене и удаляем данныпе про пользователя
     #Получаем название группы из названия OU
@@ -83,25 +102,27 @@ function Add-NewUserTOGroup {
     if ($OU -eq $core) {
         continue
     }
+    $userData = $existUser
     $newUser = $userData.SamAccountName #Получаем логин пользователя
     $newUser 
     if ($userData.Title -like "*Директор*", "*Руководитель*", "*Начальник*") {
         #Если сотрудник является руководителем
-        $ouGroup = Get-ADGroup -Filter { Name -like "*Руководители*" } -SearchBase $OU
+        $ouGroup = Get-ADGroup -Filter { Name -like "*Руководители*" } -SearchBase $OU | select -ExpandProperty samaccountname
+        $ouGroup 
         if ($ouGroup) {
             Add-ADGroupMember -Identity $ouGroup -Members $newUser
         }
         else {
             writeLog "Нет группы руководителя. Необходимо будет ее создать. Сотрдуник получил стандартные права"
             $department = "*$department*"
-            $ouGroup = Get-ADGroup -Filter { Name -like $department } -SearchBase $OU
+            $ouGroup = Get-ADGroup -Filter { Name -like $department } -SearchBase $OU | select -ExpandProperty samaccountname
             Add-ADGroupMember -Identity $ouGroup -Members $newUser
         }
     }
     else {
         writeLog "Сотрудник добавлен в группы отдела"
-        $department = "*$department*"
-        $ouGroup = Get-ADGroup -Filter { Name -like $department } -SearchBase $OU
+        $department = "G " + $department
+        $ouGroup = Get-ADGroup -Filter { Name -like $department } -SearchBase $OU | select -ExpandProperty samaccountname
         Add-ADGroupMember -Identity $ouGroup -Members $newUser
     }
 }
@@ -111,35 +132,31 @@ function writeLogin {
     Write-Output $logString >> $loginFile
 }
 foreach ($userFromOldDomain in $data) {
-    $userPasswordToCard = Get-Password
-    $userPassword = ConvertTo-SecureString -String $userPasswordToCard -AsPlainText -Force
     
     $OU = Get-OU $userFromOldDomain 
-    
     New-UserAD -data $userFromOldDomain -OU $OU
-    
-    Add-NewUserTOGroup -userData $userFromOldDomain.samaccountname -OU $OU
-    
-    $folderPath = "C:\results"
-    $loginFileName = $userFromOldDomain.Name + ".txt"
-    $loginFile = Join-Path $folderPath $loginFileName 
-    writeLogin "Логин -  $($userFromOldDomain.UserPrincipalName)"
-    writeLogin "Пароль =  $($userPasswordToCard)"
+    $existUser = Get-ADUser -Identity $userFromOldDomain.samaccountname
+    Add-NewUserTOGroup
 }
-$usersAD = Get-aduser - Filter * -Properties *
-Start-Sleep -Seconds 10
-
 foreach ($userFromOldDomain in $data) {
-    $manager = (($userFromOldDomain.manager).replace("CN=", "")).split(",")[0] 
-    $managerAD = $userAD | Where-Object { $_.Name -like "*$manager*" } # Ищем сотрудника по ФИО
-   
- 
-    if ($null -eq $managerAD) {
-        writeLog "Руководитель не найден. Информация не будет заполнена в карточку сотрудника `n"
-        continue
-    }
-    else {
-       # set-aduser -Identity $userFromOldDomain.SamAccountName -Manager $managerAD    
+    $userName = $userFromOldDomain.Name
+    $manager = $userFromOldDomain.Manager
+
+    if ($manager) {
+        $manager = ($manager -replace "CN=", "").Split(",")[0]
+        $managerAD = Get-ADUser -Filter { Name -like $manager } -Properties *
+
+        if (-not $managerAD) {
+            Write-Output "Руководитель '$manager' не найден. Информация не будет заполнена в карточку сотрудника."
+            continue
+        } else {
+            Set-ADUser -Identity $userFromOldDomain.SamAccountName -Manager $managerAD
+        }
+    } else {
+        Write-Output "Руководитель не указан для пользователя '$userName'."
     }
 }
+
+
+
 #------------------------------------------------Создание файла для сотрудника------------------------------------------------#
