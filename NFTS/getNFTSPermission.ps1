@@ -64,8 +64,8 @@ $folders = Get-ChildItem -Path $corePath -Directory
 $pathDOM = New-FolderFromPath $corePath
 $logDOM = Join-Path $pathDOM "DOM.csv"
 Get-Nfts $corePath | select IdentityReference, FileSystemRights, AccessControlType, IsInherited, path | Export-csv $logDOM -Encoding Default -Delimiter ";" -NoTypeInformation
-$childFolder = @() #Массив куда будем складывать конечный результат 
 foreach ($folder in $folders) {
+    $childFolder = @() #Массив куда будем складывать конечный результат 
     $parentFolder = get-nfts $folder.fullname # Получаем путь родительской папки 
     $subFolders = Get-ChildItem -Path $folder.FullName -Directory -Recurse # список всех папок внутри родительской
     $NFTS = (($folder.FullName).replace("\\ukkalita.local\iptg\Дивизион управления недвижимостью\", "")).replace("\", "__") # части имени

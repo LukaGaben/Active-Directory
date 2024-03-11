@@ -94,6 +94,9 @@ function New-UserAD {
     
 }
 function Add-NewUserTOGroup {
+    param (
+        $userData
+    ) 
     $OU
     # $OU = $userData.DistinguishedName -replace "CN=[^,]+,", "" #Получаем полный адрес уз в домене и удаляем данныпе про пользователя
     #Получаем название группы из названия OU
@@ -102,9 +105,9 @@ function Add-NewUserTOGroup {
     if ($OU -eq $core) {
         continue
     }
-    $userData = $existUser
     $newUser = $userData.SamAccountName #Получаем логин пользователя
     $newUser 
+    $titleList = "","",""
     if ($userData.Title -like "*Директор*", "*Руководитель*", "*Начальник*") {
         #Если сотрудник является руководителем
         $ouGroup = Get-ADGroup -Filter { Name -like "*Руководители*" } -SearchBase $OU | select -ExpandProperty samaccountname
@@ -132,28 +135,33 @@ function writeLogin {
     Write-Output $logString >> $loginFile
 }
 foreach ($userFromOldDomain in $data) {
-    
     $OU = Get-OU $userFromOldDomain 
     New-UserAD -data $userFromOldDomain -OU $OU
-    $existUser = Get-ADUser -Identity $userFromOldDomain.samaccountname
-    Add-NewUserTOGroup
+    
 }
 foreach ($userFromOldDomain in $data) {
     $userName = $userFromOldDomain.Name
-    $manager = $userFromOldDomain.Manager
+    $existUser = Get-ADUser -Identity $userFromOldDomain.samaccountname
+    $OU = $existUser.DistinguishedName -replace '^.*?,', ''
+    Add-NewUserTOGroup $existUser 
 
+
+
+    $manager = $userFromOldDomain.Manager
     if ($manager) {
         $manager = ($manager -replace "CN=", "").Split(",")[0]
         $managerAD = Get-ADUser -Filter { Name -like $manager } -Properties *
 
         if (-not $managerAD) {
-            Write-Output "Руководитель '$manager' не найден. Информация не будет заполнена в карточку сотрудника."
+            writeLog "Руководитель '$manager' не найден. Информация не будет заполнена в карточку сотрудника."
             continue
-        } else {
+        }
+        else {
             Set-ADUser -Identity $userFromOldDomain.SamAccountName -Manager $managerAD
         }
-    } else {
-        Write-Output "Руководитель не указан для пользователя '$userName'."
+    }
+    else {
+        writeLog "Руководитель не указан для пользователя '$userName'."
     }
 }
 
