@@ -7,6 +7,10 @@ $groupFolderPath = "C:\result\GROUPS"
 if (-not (Test-Path $groupFolderPath -PathType Container)) {
     New-Item -ItemType Directory -Path $groupFolderPath -ErrorAction SilentlyContinue | Out-Null
 }
+$logFolderPath = "C:\result\LOG"
+if (-not (Test-Path $logFolderPath -PathType Container)) {
+    New-Item -ItemType Directory -Path $logFolderPath -ErrorAction SilentlyContinue | Out-Null
+}
 $resultPath = "C:\result"
 # Получаем текущие права доступа для пути
 $CurrentAcl = Get-Acl -Path $resultPath
