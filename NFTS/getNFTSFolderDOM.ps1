@@ -29,4 +29,26 @@ if (-not $ruleExists) {
     Set-Acl -Path $resultPath -AclObject $CurrentAcl
 } 
 #Создание структуры папок законченно
-#Далее пойдет основной код с start-job
+# Путь к скрипту test.ps1
+$scriptPath = "C:\1\test.ps1"
+# Путь к скрипту test.ps1
+
+$job1 = Start-Job -ScriptBlock { param($scriptPath, $corePath) & $scriptPath -corePath $corePath } -ArgumentList $scriptPath, "\\ukkalita.local\iptg\Дивизион управления недвижимостью"
+Start-Sleep -Seconds 2
+# Путь 2
+$job2 = Start-Job -ScriptBlock { param($scriptPath, $corePath) & $scriptPath -corePath $corePath } -ArgumentList $scriptPath, "\\ukkalita.local\iptg\Дивизион управления недвижимостью\DOM"
+# Путь 3
+$job3 = Start-Job -ScriptBlock { param($scriptPath, $corePath) & $scriptPath -corePath $corePath } -ArgumentList $scriptPath, "\\ukkalita.local\iptg\Дивизион управления недвижимостью\Правовой департамент"
+
+# Ожидание завершения всех заданий
+Wait-Job $job1, $job2, $job3
+
+$dateForEndScript2 = Get-Date -f dd_MM_yyyy__HH-mm-ss
+$endScriptPath = "C:\result\"
+$FolderName = $dateForEndScript2 + ".log"
+$endScript = Join-Path $endScriptPath $FolderName
+New-Item -Path $endScript -ItemType File -ErrorAction SilentlyContinue | Out-Null
+
+
+# Очистка выполненных заданий
+Remove-Job $job1, $job2, $job3
