@@ -5,7 +5,7 @@
 #_______________________________________________________________________________________________________________________________________________________________________________________________________________#
 function writeLog {
     Param ($logString)
-    Write-Output $logString
+   
     Write-Output $logString >> $logFile
 }
 # Начало формирования имени логов 
@@ -30,37 +30,39 @@ $folderPath = "C:\result\LOG"
 $errorLogFile = Join-Path $folderPath $errorLogFileName #Формируем лог файл
 writeLog "Проверка каталога: $($corePath)"
 
-#_______________________________________________________________________________________________________________________________________________________________________________________________________________#
-
+#_______________________________________________________________________________________________________________________________________________________________________________________________________________#function New-FolderFromPath {
 function New-FolderFromPath {
     param (
         $folder # Сюда путь или объект по выборки fullname
     )
-    # $folder = "\\ukkalita.local\iptg\Дивизион управления недвижимостью\Департамент IT сопровождения"
-    # Разбиваем строку
-    $a = $folder.split("\")  
-    # Получаем предпоследний элемент
-    $parentNFTS = $a[-2]
-    # Получаем последний элемент
-    $NFTS = $a[-1]
-    # Базовая папка, где будут создаваться папки для скрипта Get-NFTS
-    $nftsFolderPath = "C:\result\NFTS\"
-    # Создаем путь к папке, которую нужно проверить
-    $cheakFolder = Join-Path $nftsFolderPath $parentNFTS
-    # Получаем список папок в базовой папке
-    $listCheakFolder = (Get-ChildItem $nftsFolderPath).FullName
-    # Если папка существует, то создаем путь к новой папке
-    if ($listCheakFolder -contains $cheakFolder) {
-        $resultNFTSFolderPath = join-path $cheakFolder $NFTS
+
+    $parentFolder = $folder.Split("\")[-2]
+    Write-Host "$($parentFolder)"
+    $folderName = Split-Path $folder -Leaf
+    $baseFolderPath = "C:\result\NFTS\Дивизион управления недвижимостью"
+    New-Item -ItemType Directory -Path $baseFolderPath -ErrorAction SilentlyContinue | Out-Null
+    $baseFolderPathlast = Split-Path $baseFolderPath -Leaf
+    if ($folderName -eq $baseFolderPathlast ) {
+        Write-Host "Это хорошо папка есть "
+        $resultFolderPath = $baseFolderPath
     }
     else {
-        $resultNFTSFolderPath = Join-Path $nftsFolderPath $NFTS
-    }
-    # Создаем новую папку
-    New-Item -ItemType Directory -Path $resultNFTSFolderPath -ErrorAction SilentlyContinue | Out-Null
-    return $resultNFTSFolderPath
+        Write-Host "RWRE"
+        $cheakFolder = Join-Path $baseFolderPath $parentFolder
+        # Получаем список папок в базовой папке
+        $listCheakFolder = (Get-ChildItem $baseFolderPath).FullName
+        # Если папка существует, то создаем путь к новой папке
+        if ($listCheakFolder -contains $cheakFolder) {
+            $resultFolderPath = join-path $cheakFolder $folderName
+        }
+        else {
+            $resultFolderPath = Join-Path $baseFolderPath $folderName
+        }
+        New-Item -ItemType Directory -Path $resultFolderPath -ErrorAction SilentlyContinue | Out-Null
+    }  
+    return $resultFolderPath    
 }
-#_______________________________________________________________________________________________________________________________________________________________________________________________________________#
+#______________________________________________________________________________________________________________________________________________________________________________________________________________#
 function Get-Nfts {
     param (
         [string]$Path
@@ -75,12 +77,11 @@ function Get-Nfts {
 #_______________________________________________________________________________________________________________________________________________________________________________________________________________#
 #Тут нужно написать блок который будет содержать получения прав с корневой папки 
 $coreFolderName = $corePath.Split("\")[-1] + ".csv"
-writeLog "Создание основного каталога для хранения результата"
 $folderResults = New-FolderFromPath $corePath # Создание папки 
+
 $exportResulrtToFile = Join-Path $folderResults $coreFolderName # Формирование пути для логов
 writeLog "Начало экспорта данных в файл $($exportResulrtToFile)"
-$resultCoreFolder = Get-Nfts $corePath 
-$resultCoreFolder | select IdentityReference, FileSystemRights, AccessControlType, IsInherited, path  | Export-Csv $exportResulrtToFile -Encoding UTF8 -Delimiter "|" -NoTypeInformation
+Get-Nfts $corePath | select IdentityReference, FileSystemRights, AccessControlType, IsInherited, path  | Export-Csv $exportResulrtToFile -Encoding UTF8 -Delimiter "|" -NoTypeInformation
 $cheackFile = (Get-ChildItem $folderResults).FullName
 if ($cheackFile -Contains ($exportResulrtToFile)) {
     writeLog "Файл $($coreFolderName) создался успешно `n"
@@ -88,37 +89,48 @@ if ($cheackFile -Contains ($exportResulrtToFile)) {
 else {
     writeLog "Файл $($coreFolderName) не создался в каталоге `n"
 }
+$cheackFolder = (Get-ChildItem $folderResults).name
+Start-Sleep -Seconds 10
+
 #_______________________________________________________________________________________________________________________________________________________________________________________________________________#
 $listOfFoldersInCorePath = (Get-ChildItem $corePath -Directory).FullName
-foreach ($folder in $listOfFoldersInCorePath) {
-    writeLog "Создание каталога для $($folder)"
-    $resultFolder = New-FolderFromPath $folder
-    $resultsChild = @()
-    writeLog "Получение прав для каталога $($folder)"
-    $perantResults = Get-Nfts $folder 
-    writeLog "Получение прав для всех каталогов внутри $($folder)"
-    $childFolders = (Get-ChildItem $folder -Directory -Recurse).FullName
-    foreach ($childFolder in $childFolders) {
-        $subFoldersPath = $childFolder.FullName
-        try {
-            $subFoldersPath
-            $permission = Get-Nfts $childFolder
-            $resultsChild += $permission
-        }
-        catch {
-            $errorMessage = $_.Exception.Message
-            errorLog "Error in folder $subFoldersPath : $errorMessage"
-        }
+foreach ($folder in $listOfFoldersInCorePath) {  
+    $s = (Get-Item $folder).name
+    if ($cheackFolder -contains ($s)) {
+        Write-Host "Hahahaha"
+        continue
     }
-    writeLog "Процесс получения прав для всех каталогов внутри $($folder) окончен `n"
-    $resultPerantFolderName = "Perant__" + $folder.split("\")[-1] + ".csv"
-    $resultFolderName = $folder.split("\")[-1] + ".csv"
-    # 2 переменные  - в какой файл сливать данные 
-    $exportResultPerantFolderName = Join-Path $resultFolder $resultPerantFolderName 
-    $exportResultFolderName = Join-Path $resultFolder $resultFolderName
-    writeLog "Выгружаем результаты в каталог $($resultFolder)"
-    $perantResults | select IdentityReference, FileSystemRights, AccessControlType, IsInherited, path  | Export-Csv $exportResultPerantFolderName -Encoding UTF8 -Delimiter "|" -NoTypeInformation
-    $resultsChild | select IdentityReference, FileSystemRights, AccessControlType, IsInherited, path | Export-Csv $exportResultFolderName -Encoding UTF8 -Delimiter "|" -NoTypeInformation
-}
+    else {
+        writeLog "Создание каталога для $($folder)"
+        $resultFolder = New-FolderFromPath $folder
+        $resultsChild = @()
+        writeLog "Получение прав для каталога $($folder)"
+        $perantResults = Get-Nfts $folder
+        writeLog "Получение прав для всех каталогов внутри $($folder)"
+        $childFolders = (Get-ChildItem $folder -Directory -Recurse).FullName
+        foreach ($childFolder in $childFolders) {
+            $subFoldersPath = $childFolder.FullName
+            try {
+                $subFoldersPath
+                $permission = Get-Nfts $childFolder
+                $resultsChild += $permission
+            }
+            catch {
+                $errorMessage = $_.Exception.Message
+                errorLog "Error in folder $subFoldersPath : $errorMessage"
+            }
+        }
+        writeLog "Процесс получения прав для всех каталогов внутри $($folder) окончен `n"
+        $resultPerantFolderName = "Perant__" + $folder.split("\")[-1] + ".csv"
+        $resultFolderName = $folder.split("\")[-1] + ".csv"
 
+        $exportResultPerantFolderName = Join-Path $resultFolder $resultPerantFolderName 
+        $exportResultFolderName = Join-Path $resultFolder $resultFolderName
+        writeLog "Выгружаем результаты в каталог $($resultFolder)"
+        $perantResults | select IdentityReference, FileSystemRights, AccessControlType, IsInherited, path  | Export-Csv $exportResultPerantFolderName -Encoding UTF8 -Delimiter "|" -NoTypeInformation
+        $resultsChild | select IdentityReference, FileSystemRights, AccessControlType, IsInherited, path | Export-Csv $exportResultFolderName -Encoding UTF8 -Delimiter "|" -NoTypeInformation
+        
+    }
+}
+#>
 writeLog "Работа скрипта оконченна"
